@@ -66,13 +66,17 @@ def printMessages(messages):
 			if(message and message['text']):
 				print(message['user'] + " -- " + message['ts'] + " -- " + message['text'])
 
-def getYoureUpNextMessages(args, client, messages, uid_draft_order):
-	currently_drafting_uid = uid_draft_order[0]
+def getYoureUpNextMessages(args, client, messages, uid_to_username, uid_draft_order, next_player_slack_tags):
+	current_drafter_index = 0
+	most_recent_message_index = 0
 
-	tag_match = '<@U104SDZ8B>'
-	for message in messages:
-		if tag_match in message['text']:
-			print("Peter Drafted at: " + message['ts'])
+	for message_index in range(len(messages)):
+		message = messages[message_index]
+		for tag_to_match in next_player_slack_tags[current_drafter_index]:
+			if tag_to_match in message['text']:
+				print("%s drafted at: %s" % (uid_to_username[uid_draft_order[current_drafter_index]], message['ts']))
+				current_drafter_index = 0 if current_drafter_index == len(uid_draft_order) - 1 else current_drafter_index + 1
+				break
 
 parser = argparse.ArgumentParser() 
 parser.add_argument('-t', '--token', help="Workspace token of the app", required=True)
@@ -109,4 +113,4 @@ print(next_player_slack_tags)
 
 messages = getTimeOrderedMessages(args, client)
 #printMessages(messages)
-getYoureUpNextMessages(args, client, messages, uid_draft_order)
+getYoureUpNextMessages(args, client, messages, uid_to_username, uid_draft_order, next_player_slack_tags)
