@@ -147,7 +147,7 @@ def getYoureUpNextMessages(args, client, messages, uid_to_username, uid_draft_or
 				if inner_next_tag_to_match in inner_message['text'] or inner_prev_tag_to_match in inner_message['text']:
 					inner_message_tag_count = inner_message_tag_count + 1
 			if inner_message_tag_count > 1:
-					print("Inner message tag count = %d... worth re-searching?" % inner_message_tag_count)
+					print("Inner message tag count = %d... worth re-searching? (YES!)" % inner_message_tag_count)
 			most_recent_message_index = message_index
 
 
