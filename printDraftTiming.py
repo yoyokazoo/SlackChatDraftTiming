@@ -80,7 +80,8 @@ def getTimeOrderedMessages(args, client):
 		if not conversations['has_more']:
 			break
 
-		all_messages.sort(key=(lambda message: message['ts']))
+	
+	all_messages.sort(key=(lambda message: message['ts']))
 	return all_messages
 
 def printMessages(messages):
@@ -154,7 +155,7 @@ def getYoureUpNextMessages(args, client, messages, uid_to_username, uid_draft_or
 parser = argparse.ArgumentParser() 
 parser.add_argument('-t', '--token', help="Workspace token of the app", required=True)
 parser.add_argument('-c', '--channel_id', help="Channel ID of the channel you want to scan.  If not included, it will list the available channels and ids")
-parser.add_argument('-d', '--draft_order', help="Order of drafters.  ", nargs='+')
+parser.add_argument('-d', '--draft_order', help="Order of drafters.  ", default=['ADD_DRAFTERS_HERE'], nargs='+')
 args = parser.parse_args()
 print(args)
 
