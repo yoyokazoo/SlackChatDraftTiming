@@ -31,7 +31,7 @@ def createUserAssociations(args, client):
 
 	for name in args.draft_order:
 		if not name in username_to_uid:
-			print("Couldn't find slack user '%s', exiting" % name)
+			print("Couldn't find slack user '%s', exiting.\nAvailable usernames are: %s" % (name, username_to_uid.keys()))
 			exit()
 
 	return username_to_uid, uid_to_username
@@ -66,6 +66,14 @@ def printMessages(messages):
 			if(message and message['text']):
 				print(message['user'] + " -- " + message['ts'] + " -- " + message['text'])
 
+def getYoureUpNextMessages(args, client, messages, uid_draft_order):
+	currently_drafting_uid = uid_draft_order[0]
+
+	tag_match = '<@U104SDZ8B>'
+	for message in messages:
+		if tag_match in message['text']:
+			print("Peter Drafted at: " + message['ts'])
+
 parser = argparse.ArgumentParser() 
 parser.add_argument('-t', '--token', help="Workspace token of the app", required=True)
 parser.add_argument('-c', '--channel_id', help="Channel ID of the channel you want to scan.  If not included, it will list the available channels and ids")
@@ -77,5 +85,28 @@ client = slack.WebClient(token=args.token)
 
 handleMissingChannelId(args, client)
 username_to_uid, uid_to_username = createUserAssociations(args,client)
+
+uid_draft_order = []
+for username in args.draft_order:
+	uid_draft_order.append(username_to_uid[username])
+print(uid_draft_order)
+
+next_player_slack_tags = []
+for uid_index in range(len(uid_draft_order)):
+	next_player_index = uid_index + 1
+	prev_player_index = uid_index - 1
+	if next_player_index == len(uid_draft_order):
+		next_player_index = 0
+	if prev_player_index == -1:
+		prev_player_index = len(uid_draft_order) - 1
+
+	next_player_array = []
+	next_player_array.append("<@%s>" % uid_draft_order[next_player_index])
+	next_player_array.append("<@%s>" % uid_draft_order[prev_player_index])
+
+	next_player_slack_tags.append(next_player_array)
+print(next_player_slack_tags)
+
 messages = getTimeOrderedMessages(args, client)
-printMessages(messages)
+#printMessages(messages)
+getYoureUpNextMessages(args, client, messages, uid_draft_order)
