@@ -48,12 +48,13 @@ def createUserAssociations(args, client):
 		if prev_player_index == -1:
 			prev_player_index = len(uid_draft_order) - 1
 
-		next_player_array = []
-		next_player_array.append("<@%s>" % uid_draft_order[next_player_index])
-		next_player_array.append("<@%s>" % uid_draft_order[prev_player_index])
+		next_player_dict = {}
+		next_player_dict['next'] = ("<@%s>" % uid_draft_order[next_player_index])
+		next_player_dict['prev'] = ("<@%s>" % uid_draft_order[prev_player_index])
 
-		next_player_slack_tags.append(next_player_array)
-	# print(next_player_slack_tags)
+		next_player_slack_tags.append(next_player_dict)
+	print(uid_draft_order)
+	print(next_player_slack_tags)
 
 	return username_to_uid, uid_to_username, uid_draft_order, next_player_slack_tags
 
@@ -87,9 +88,17 @@ def printMessages(messages):
 			if(message and message['text']):
 				print(message['user'] + " -- " + message['ts'] + " -- " + message['text'])
 
+def replaceUidWithUsername(str_to_replace, uid_to_username):
+	replaced_str = str_to_replace
+	for k,v in uid_to_username.items():
+		replaced_str = replaced_str.replace(k,v)
+	return replaced_str
+
 def getYoureUpNextMessages(args, client, messages, uid_to_username, uid_draft_order, next_player_slack_tags):
 	#print(messages)
 	current_draft_round = 1
+	draft_direction = 1
+	draft_key = 'next'
 	current_drafter_index = 0
 	most_recent_message_index = 0
 
@@ -101,30 +110,43 @@ def getYoureUpNextMessages(args, client, messages, uid_to_username, uid_draft_or
 		if ignore:
 			continue
 
-		for tag_to_match in next_player_slack_tags[current_drafter_index]:
-			#print("Checking %s against %s" % (tag_to_match, message['text']))
-			if tag_to_match in message['text']:
-				print("%s drafted at: %s (%s)" % (uid_to_username[uid_draft_order[current_drafter_index]], message['ts'], messages[message_index]['text'].replace("\n", " ")))
-				#print("%s %s %s", (messages[message_index-1]['text'], messages[message_index]['text'], messages[message_index+1]['text']))
-				if current_drafter_index == len(uid_draft_order) - 1:
-					print("Done with round %s" % current_draft_round)
-					current_draft_round = current_draft_round + 1
-					current_drafter_index = 0
-				else:
-					current_drafter_index = current_drafter_index + 1
+		#for tag_to_match in next_player_slack_tags[current_drafter_index][draft_key]:
+		tag_to_match = next_player_slack_tags[current_drafter_index][draft_key]
+		print("Checking %s against %s" % (tag_to_match, message['text']))
 
-				# check that there aren't a lot of legal tags in between the start and end index.  If so, we probably missed one and should do a re-scan
-				for inner_message_index_offset in range(message_index - most_recent_message_index):
-					inner_message_tag_count = 0
-					inner_message_index = inner_message_index_offset + most_recent_message_index + 1
-					#print("%s %s %s" % (message_index, most_recent_message_index, inner_message_index))
-					inner_message = messages[inner_message_index]
-					for tag_to_match in uid_draft_order:
-						if tag_to_match in inner_message['text']:
-							inner_message_tag_count = inner_message_tag_count + 1
-					if inner_message_tag_count > 1:
-						print("Inner message tag count = %d... worth re-searching?" % inner_message_tag_count)
-				most_recent_message_index = message_index
+		# is it OK if someone else tags the person that's up? or should we check that the message sender is the previous drafter?
+		if tag_to_match in message['text']:
+			#print("%s %s %s", (messages[message_index-1]['text'], messages[message_index]['text'], messages[message_index+1]['text']))
+			prev_drafter_index = current_drafter_index
+			if draft_direction == 1 and current_drafter_index == len(uid_draft_order):
+				print("Done with round %s, changing direction" % current_draft_round)
+				current_draft_round = current_draft_round + 1
+				if current_draft_round % 2 == 0:
+					draft_direction = -1
+					draft_key = 'prev'
+				else:
+					draft_direction = 1
+					draft_key = 'next'
+
+			current_drafter_index = current_drafter_index + draft_direction
+
+			print("%s drafted at: %s (%s). Next drafter is: %s" % (uid_to_username[uid_draft_order[prev_drafter_index]], message['ts'], replaceUidWithUsername(messages[message_index]['text'].replace("\n", " "), uid_to_username), uid_to_username[uid_draft_order[current_drafter_index]]))
+			print("New tag to match is %s (%s)" % (next_player_slack_tags[current_drafter_index][draft_key], replaceUidWithUsername(next_player_slack_tags[current_drafter_index][draft_key], uid_to_username)))
+			# check that there aren't a lot of legal tags in between the start and end index.  If so, we probably missed one and should do a re-scan
+			# this might not work?? needs more testing
+			inner_message_tag_count = 0
+			for inner_message_index_offset in range(message_index - most_recent_message_index):
+				inner_message_index = inner_message_index_offset + most_recent_message_index + 1
+				#print("%s %s %s" % (message_index, most_recent_message_index, inner_message_index))
+				inner_message = messages[inner_message_index]
+				inner_next_tag_to_match = next_player_slack_tags[current_drafter_index]['next']
+				inner_prev_tag_to_match = next_player_slack_tags[current_drafter_index]['prev']
+				#print("Checking %s and %s against %s" % (inner_next_tag_to_match, inner_prev_tag_to_match, inner_message['text']))
+				if inner_next_tag_to_match in inner_message['text'] or inner_prev_tag_to_match in inner_message['text']:
+					inner_message_tag_count = inner_message_tag_count + 1
+			if inner_message_tag_count > 1:
+					print("Inner message tag count = %d... worth re-searching?" % inner_message_tag_count)
+			most_recent_message_index = message_index
 
 
 parser = argparse.ArgumentParser() 
