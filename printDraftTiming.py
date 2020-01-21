@@ -29,21 +29,26 @@ class Draft:
 		return self.users_in_draft_order[self.getSafeDrafterIndex(self.current_drafter_index - self.draft_direction)]
 	def getNextDrafter(self):
 		return self.users_in_draft_order[self.getSafeDrafterIndex(self.current_drafter_index + self.draft_direction)]
+	def changeDraftDirection(self):
+		self.draft_direction = self.draft_direction * -1
 	def moveToNextDrafter(self):
 		self.prev_drafter_index = self.current_drafter_index
 		self.prev_draft_round = self.current_draft_round
 
-		self.current_drafter_index = self.current_drafter_index + self.draft_direction
+		self.current_drafter_index = self.getSafeDrafterIndex(self.current_drafter_index + self.draft_direction)
 
 		# modify this to respect starting_drafter_index to wheel properly
-		if (self.draft_direction == 1 and self.current_drafter_index == self.getDrafterCount() - 1) or (self.draft_direction == -1 and self.current_drafter_index == 0):
+		if self.draft_direction == 1 and self.current_drafter_index == self.end_drafter_index:
+			self.changeDraftDirection()
+		elif self.draft_direction == -1 and self.current_drafter_index == self.start_drafter_index:
 			self.current_draft_round = self.current_draft_round + 1
-			if self.current_draft_round % 2 == 0:
-				self.draft_direction = -1
-				self.draft_key = 'prev'
-			else:
-				self.draft_direction = 1
-				self.draft_key = 'next'
+			# change to be extensible later on, since this draft is unusual
+			self.start_drafter_index = self.getSafeDrafterIndex(self.start_drafter_index + 1)
+			self.end_drafter_index = self.getSafeDrafterIndex(self.end_drafter_index + 1)
+			self.changeDraftDirection()
+
+		#if draft.prev_draft_round != draft.current_draft_round:
+		#		print("Done with round %s after %s's pick" % (draft.prev_draft_round, draft.getCurrentDrafter().name))
 
 	def __init__(self, _users_in_draft_order):
 		self.users_in_draft_order = _users_in_draft_order
@@ -52,9 +57,9 @@ class Draft:
 		self.current_draft_round = 1
 		
 		self.draft_direction = 1
-		self.draft_key = 'next'
 
-		self.starting_drafter_index = 0
+		self.start_drafter_index = 0
+		self.end_drafter_index = self.getDrafterCount() - 1
 
 		self.prev_drafter_index = 0
 		self.current_drafter_index = 0
@@ -134,7 +139,11 @@ def getYoureUpNextMessages(draft, messages):
 
 	IGNORE_THESE_MESSAGES = ["has joined the channel", "set the channel topic"]
 
-	for message_index in range(len(messages)):
+	# a little ugly fenceposting since we might modify the index on a rescan so a for loop won't work
+	message_index = -1
+	while message_index + 1 < len(messages):
+		message_index = message_index + 1
+		#print("Checking message index %d" % message_index)
 		message = messages[message_index]
 
 		ignore = [contains_ignore for contains_ignore in IGNORE_THESE_MESSAGES if(contains_ignore in message['text'])] 
@@ -183,7 +192,7 @@ def getYoureUpNextMessages(draft, messages):
 							continue
 
 						if rescan_tag_to_match in rescan_message['text']:
-							print("Found what we think the next tag is: %s" % rescan_message['text'])
+							#print("Found what we think the next tag is: %s" % rescan_message['text'])
 							next_player_rescan_index = rescan_message_index
 
 							for reverse_message_index_offset in reversed(range(next_player_rescan_index - most_recent_message_index)):
@@ -198,6 +207,7 @@ def getYoureUpNextMessages(draft, messages):
 
 								if reverse_message['user'] == rescan_user.uid:
 									print("Most recent message from %s is %s, assuming this is their pick." % (rescan_user.name, reverse_message['text']))
+									print("Setting message index to %d" % reverse_message_index)
 									message_index = reverse_message_index
 									break
 						#print("Checking tags against %s" % (inner_message['text']))
@@ -206,9 +216,7 @@ def getYoureUpNextMessages(draft, messages):
 						#	next_player_rescan_index = rescan_message_index
 
 			#print("%s %s %s", (messages[message_index-1]['text'], messages[message_index]['text'], messages[message_index+1]['text']))
-			print("%s drafted at: %s (%s). Next drafter is: %s" % (draft.getPreviousDrafter().name, message['ts'], replaceUidWithUsername(messages[message_index]['text'].replace("\n", " "), draft.getPreviousDrafter()), draft.getCurrentDrafter().name))
-			if draft.prev_draft_round != draft.current_draft_round:
-				print("Done with round %s after %s's pick" % (draft.prev_draft_round, draft.getCurrentDrafter().name))
+			print("%s drafted at: %s (%s). Next drafter is: %s" % (rescan_user.name, message['ts'], replaceUidWithUsername(messages[message_index]['text'].replace("\n", " "), rescan_user), draft.getCurrentDrafter().name))
 
 			most_recent_message_index = message_index
 
