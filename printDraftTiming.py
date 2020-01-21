@@ -264,3 +264,19 @@ picks = getPicks(draft, messages)
 for pick in picks:
 	print(pick)
 #print(picks)
+
+# TODO:
+#Refactor message searching
+
+#output picks to file, import picks from file, throw out dupes
+# actually, put picks in the draft, export the draft, import the draft
+# have the draft remember what message goes with last pick and pick up from there?
+# we're going to lose slack history some day and want to be able to handle that
+
+# output pick stats to file -- average time taken to pick, median, min, max
+
+# specify file instead of token/channel/draft order, and store that inside draft
+
+# back up file before creating a new one, since as development goes on I'll introduce bugs and corrupt things, and they'll be small enough
+
+# be able to specify draft type? since this one is rather weird (esp. once we stop wheeling)
