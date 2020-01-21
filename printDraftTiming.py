@@ -19,8 +19,45 @@ class User:
 		self.setUid(_uid)
 
 class Draft:
+	def getDrafterCount(self):
+		return len(self.users_in_draft_order)
+	def getSafeDrafterIndex(self, index):
+		return index % self.getDrafterCount()
+	def getCurrentDrafter(self):
+		return self.users_in_draft_order[self.current_drafter_index]
+	def getPreviousDrafter(self):
+		return self.users_in_draft_order[self.getSafeDrafterIndex(self.current_drafter_index - self.draft_direction)]
+	def getNextDrafter(self):
+		return self.users_in_draft_order[self.getSafeDrafterIndex(self.current_drafter_index + self.draft_direction)]
+	def moveToNextDrafter(self):
+		self.prev_drafter_index = self.current_drafter_index
+		self.prev_draft_round = self.current_draft_round
+
+		self.current_drafter_index = self.current_drafter_index + self.draft_direction
+
+		# modify this to respect starting_drafter_index to wheel properly
+		if (self.draft_direction == 1 and self.current_drafter_index == self.getDrafterCount() - 1) or (self.draft_direction == -1 and self.current_drafter_index == 0):
+			self.current_draft_round = self.current_draft_round + 1
+			if self.current_draft_round % 2 == 0:
+				self.draft_direction = -1
+				self.draft_key = 'prev'
+			else:
+				self.draft_direction = 1
+				self.draft_key = 'next'
+
 	def __init__(self, _users_in_draft_order):
 		self.users_in_draft_order = _users_in_draft_order
+
+		self.prev_draft_round = 1
+		self.current_draft_round = 1
+		
+		self.draft_direction = 1
+		self.draft_key = 'next'
+
+		self.starting_drafter_index = 0
+
+		self.prev_drafter_index = 0
+		self.current_drafter_index = 0
 
 		# to be removed once we have a draft class? or at least re-arranged? should a user's neighbors be stored on user?
 		# probably not, since it'll change if the wheel changes, should be accessed through draft helper method
@@ -114,10 +151,6 @@ def getYoureUpNextMessages(args, client, draft, messages):
 	users_in_draft_order = draft.users_in_draft_order
 	next_player_slack_tags = draft.next_player_slack_tags
 	#print(messages)
-	current_draft_round = 1
-	draft_direction = 1
-	draft_key = 'next'
-	current_drafter_index = 0
 	most_recent_message_index = 0
 
 	IGNORE_THESE_MESSAGES = ["has joined the channel", "set the channel topic"]
@@ -130,24 +163,14 @@ def getYoureUpNextMessages(args, client, draft, messages):
 			continue
 
 		#for tag_to_match in next_player_slack_tags[current_drafter_index][draft_key]:
-		tag_to_match = next_player_slack_tags[current_drafter_index][draft_key].tag
+		tag_to_match = draft.getNextDrafter().tag
 		#print("Checking %s against %s" % (tag_to_match, message['text']))
 
 		# is it OK if someone else tags the person that's up? or should we check that the message sender is the previous drafter?
 		if tag_to_match in message['text']:
 			# update next drafter and direction properly so we know it for re-scan if necessary
-			prev_drafter_index = current_drafter_index
-			prev_draft_round = current_draft_round
-
-			current_drafter_index = current_drafter_index + draft_direction
-			if (draft_direction == 1 and current_drafter_index == len(users_in_draft_order) - 1) or (draft_direction == -1 and current_drafter_index == 0):
-				current_draft_round = current_draft_round + 1
-				if current_draft_round % 2 == 0:
-					draft_direction = -1
-					draft_key = 'prev'
-				else:
-					draft_direction = 1
-					draft_key = 'next'
+			rescan_user = draft.getCurrentDrafter()
+			draft.moveToNextDrafter()
 
 			# check that there aren't a lot of legal tags in between the start and end index.  If so, we probably missed one and should do a re-scan
 			# this might not work?? needs more testing
@@ -168,9 +191,9 @@ def getYoureUpNextMessages(args, client, draft, messages):
 			if inner_message_tag_count > 5: # Needs re-scan.  5 chosen to avoid triggering on chatter in between but not guaranteeing the 8-9 that a miss would result in. len(draft_order)/2+1?
 					# looks suspiscious, let's re-scan.  for example, player B needs to pick, then it will be player A's turn
 					# search for player A's next tag, then look backwards for player B's most recent message.  That one is likely their actual draft.
-					print("Inner message tag count = %d... worth re-searching? (YES!)" % inner_message_tag_count)
+					#print("Inner message tag count = %d... worth re-searching? (YES!) Current drafter is %s" % (inner_message_tag_count, draft.getCurrentDrafter().name))
 
-					rescan_tag_to_match = next_player_slack_tags[current_drafter_index][draft_key].tag
+					rescan_tag_to_match = draft.getNextDrafter().tag
 
 					for rescan_message_index_offset in range(message_index - most_recent_message_index):
 						rescan_message_index = rescan_message_index_offset + most_recent_message_index + 1
@@ -189,14 +212,14 @@ def getYoureUpNextMessages(args, client, draft, messages):
 								reverse_message_index = reverse_message_index_offset + most_recent_message_index
 								#print("%s %s %s" % (message_index, most_recent_message_index, inner_message_index))
 								reverse_message = messages[reverse_message_index]
-								print("Checking for most recent message from against %s" % (reverse_message['text']))
+								#print("Checking for most recent message against %s (user: %s)" % (reverse_message['text'], reverse_message['user']))
 
 								ignore = [contains_ignore for contains_ignore in IGNORE_THESE_MESSAGES if(contains_ignore in reverse_message['text'])] 
 								if ignore:
 									continue
 
-								if reverse_message['user'] == users_in_draft_order[prev_drafter_index].uid:
-									print("Most recent message from %s is %s, assuming this is their pick." % (users_in_draft_order[prev_drafter_index].uid, reverse_message['text']))
+								if reverse_message['user'] == rescan_user.uid:
+									print("Most recent message from %s is %s, assuming this is their pick." % (rescan_user.name, reverse_message['text']))
 									message_index = reverse_message_index
 									break
 						#print("Checking tags against %s" % (inner_message['text']))
@@ -205,9 +228,9 @@ def getYoureUpNextMessages(args, client, draft, messages):
 						#	next_player_rescan_index = rescan_message_index
 
 			#print("%s %s %s", (messages[message_index-1]['text'], messages[message_index]['text'], messages[message_index+1]['text']))
-			print("%s drafted at: %s (%s). Next drafter is: %s" % (users_in_draft_order[prev_drafter_index].name, message['ts'], replaceUidWithUsername(messages[message_index]['text'].replace("\n", " "), users_in_draft_order[prev_drafter_index]), users_in_draft_order[current_drafter_index].name))
-			if prev_draft_round != current_draft_round:
-				print("Done with round %s after %s's pick" % (prev_draft_round, users_in_draft_order[current_drafter_index].name))
+			print("%s drafted at: %s (%s). Next drafter is: %s" % (draft.getPreviousDrafter().name, message['ts'], replaceUidWithUsername(messages[message_index]['text'].replace("\n", " "), draft.getPreviousDrafter()), draft.getCurrentDrafter().name))
+			if draft.prev_draft_round != draft.current_draft_round:
+				print("Done with round %s after %s's pick" % (draft.prev_draft_round, draft.getCurrentDrafter().name))
 			#print("New tag to match is %s (%s)" % (next_player_slack_tags[current_drafter_index][draft_key], replaceUidWithUsername(next_player_slack_tags[current_drafter_index][draft_key], next_player_slack_tags[current_drafter_index])))
 			
 			most_recent_message_index = message_index
@@ -223,10 +246,10 @@ print(args)
 client = slack.WebClient(token=args.token)
 
 handleMissingChannelId(args, client)
-
 users_in_draft_order = createUsers(args,client)
-draft = Draft(users_in_draft_order)
 messages = getTimeOrderedMessages(args, client)
+
+draft = Draft(users_in_draft_order)
 
 #printMessages(messages)
 getYoureUpNextMessages(args, client, draft, messages)
