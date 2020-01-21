@@ -18,6 +18,31 @@ class User:
 		self.setName(_name)
 		self.setUid(_uid)
 
+class Draft:
+	def __init__(self, _users_in_draft_order):
+		self.users_in_draft_order = _users_in_draft_order
+
+		# to be removed once we have a draft class? or at least re-arranged? should a user's neighbors be stored on user?
+		# probably not, since it'll change if the wheel changes, should be accessed through draft helper method
+		next_player_slack_tags = []
+		for uid_index in range(len(users_in_draft_order)):
+			next_player_index = uid_index + 1
+			prev_player_index = uid_index - 1
+			if next_player_index == len(users_in_draft_order):
+				next_player_index = 0
+			if prev_player_index == -1:
+				prev_player_index = len(users_in_draft_order) - 1
+
+			next_player_dict = {}
+			next_player_dict['next'] = users_in_draft_order[next_player_index]
+			next_player_dict['prev'] = users_in_draft_order[prev_player_index]
+
+			next_player_slack_tags.append(next_player_dict)
+
+		self.next_player_slack_tags = next_player_slack_tags
+		print(self.users_in_draft_order)
+		print(self.next_player_slack_tags)
+
 def handleMissingChannelId(args, client):
 	if(not args.channel_id):
 		print("No channel ID specified.  Here are the available channels:")
@@ -49,27 +74,7 @@ def createUsers(args, client):
 			exit()
 		users_in_draft_order.append(User(name, username_to_uid[name]))
 
-	# to be removed once we have a draft class? or at least re-arranged? should a user's neighbors be stored on user?
-	# probably not, since it'll change if the wheel changes, should be accessed through draft helper method
-	next_player_slack_tags = []
-	for uid_index in range(len(users_in_draft_order)):
-		next_player_index = uid_index + 1
-		prev_player_index = uid_index - 1
-		if next_player_index == len(users_in_draft_order):
-			next_player_index = 0
-		if prev_player_index == -1:
-			prev_player_index = len(users_in_draft_order) - 1
-
-		next_player_dict = {}
-		next_player_dict['next'] = users_in_draft_order[next_player_index]
-		next_player_dict['prev'] = users_in_draft_order[prev_player_index]
-
-		next_player_slack_tags.append(next_player_dict)
-
-	print(users_in_draft_order)
-	print(next_player_slack_tags)
-
-	return users_in_draft_order, next_player_slack_tags
+	return users_in_draft_order
 
 def getTimeOrderedMessages(args, client):
 	all_messages = []
@@ -105,7 +110,9 @@ def printMessages(messages):
 def replaceUidWithUsername(str_to_replace, user):
 	return str_to_replace.replace(user.tag, "@%s" % user.name)
 
-def getYoureUpNextMessages(args, client, messages, users_in_draft_order, next_player_slack_tags):
+def getYoureUpNextMessages(args, client, draft, messages):
+	users_in_draft_order = draft.users_in_draft_order
+	next_player_slack_tags = draft.next_player_slack_tags
 	#print(messages)
 	current_draft_round = 1
 	draft_direction = 1
@@ -216,7 +223,10 @@ print(args)
 client = slack.WebClient(token=args.token)
 
 handleMissingChannelId(args, client)
-users_in_draft_order, next_player_slack_tags = createUsers(args,client)
+
+users_in_draft_order = createUsers(args,client)
+draft = Draft(users_in_draft_order)
 messages = getTimeOrderedMessages(args, client)
+
 #printMessages(messages)
-getYoureUpNextMessages(args, client, messages, users_in_draft_order, next_player_slack_tags)
+getYoureUpNextMessages(args, client, draft, messages)
