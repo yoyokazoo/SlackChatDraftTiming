@@ -279,4 +279,6 @@ for pick in picks:
 
 # back up file before creating a new one, since as development goes on I'll introduce bugs and corrupt things, and they'll be small enough
 
-# be able to specify draft type? since this one is rather weird (esp. once we stop wheeling)
+# be able to specify draft type? since this one is rather weird (esp. once we stop wheeling).  Inheritance structure?
+
+# move classes to separate files (probably heavy-handed for this?)
