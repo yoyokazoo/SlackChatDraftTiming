@@ -103,10 +103,12 @@ def getYoureUpNextMessages(args, client, messages, uid_to_username, uid_draft_or
 	current_drafter_index = 0
 	most_recent_message_index = 0
 
+	IGNORE_THESE_MESSAGES = ["has joined the channel", "set the channel topic"]
+	all_uid_tags = ["<@%s>" % uid for uid in uid_draft_order]
+
 	for message_index in range(len(messages)):
 		message = messages[message_index]
 
-		IGNORE_THESE_MESSAGES = ["has joined the channel", "set the channel topic"]
 		ignore = [contains_ignore for contains_ignore in IGNORE_THESE_MESSAGES if(contains_ignore in message['text'])] 
 		if ignore:
 			continue
@@ -117,6 +119,28 @@ def getYoureUpNextMessages(args, client, messages, uid_to_username, uid_draft_or
 
 		# is it OK if someone else tags the person that's up? or should we check that the message sender is the previous drafter?
 		if tag_to_match in message['text']:
+			# check that there aren't a lot of legal tags in between the start and end index.  If so, we probably missed one and should do a re-scan
+			# this might not work?? needs more testing
+			inner_message_tag_count = 0
+			for inner_message_index_offset in range(message_index - most_recent_message_index):
+				inner_message_index = inner_message_index_offset + most_recent_message_index + 1
+				#print("%s %s %s" % (message_index, most_recent_message_index, inner_message_index))
+				inner_message = messages[inner_message_index]
+
+				ignore = [contains_ignore for contains_ignore in IGNORE_THESE_MESSAGES if(contains_ignore in inner_message['text'])] 
+				if ignore:
+					continue
+
+				#print("Checking tags against %s" % (inner_message['text']))
+				player_tagged = ignore = [uid_tagged for uid_tagged in all_uid_tags if(uid_tagged in inner_message['text'])] 
+				if player_tagged:
+					inner_message_tag_count = inner_message_tag_count + 1
+			if inner_message_tag_count > 5: # Needs re-scan.  5 chosen to avoid triggering on chatter in between but not guaranteeing the 8-9 that a miss would result in. len(draft_order)/2+1?
+					# looks suspiscious, let's re-scan.  for example, player B needs to pick, then it will be player A's turn
+					# search for player A's next tag, then look backwards for player B's most recent message.  That one is likely their actual draft.
+					print("Inner message tag count = %d... worth re-searching? (YES!)" % inner_message_tag_count)
+
+
 			#print("%s %s %s", (messages[message_index-1]['text'], messages[message_index]['text'], messages[message_index+1]['text']))
 			prev_drafter_index = current_drafter_index
 			prev_draft_round = current_draft_round
@@ -135,20 +159,7 @@ def getYoureUpNextMessages(args, client, messages, uid_to_username, uid_draft_or
 			if prev_draft_round != current_draft_round:
 				print("Done with round %s after %s's pick" % (prev_draft_round, uid_to_username[uid_draft_order[current_drafter_index]]))
 			#print("New tag to match is %s (%s)" % (next_player_slack_tags[current_drafter_index][draft_key], replaceUidWithUsername(next_player_slack_tags[current_drafter_index][draft_key], uid_to_username)))
-			# check that there aren't a lot of legal tags in between the start and end index.  If so, we probably missed one and should do a re-scan
-			# this might not work?? needs more testing
-			inner_message_tag_count = 0
-			for inner_message_index_offset in range(message_index - most_recent_message_index):
-				inner_message_index = inner_message_index_offset + most_recent_message_index + 1
-				#print("%s %s %s" % (message_index, most_recent_message_index, inner_message_index))
-				inner_message = messages[inner_message_index]
-				inner_next_tag_to_match = next_player_slack_tags[current_drafter_index]['next']
-				inner_prev_tag_to_match = next_player_slack_tags[current_drafter_index]['prev']
-				#print("Checking %s and %s against %s" % (inner_next_tag_to_match, inner_prev_tag_to_match, inner_message['text']))
-				if inner_next_tag_to_match in inner_message['text'] or inner_prev_tag_to_match in inner_message['text']:
-					inner_message_tag_count = inner_message_tag_count + 1
-			if inner_message_tag_count > 1:
-					print("Inner message tag count = %d... worth re-searching? (YES!)" % inner_message_tag_count)
+			
 			most_recent_message_index = message_index
 
 
