@@ -59,26 +59,7 @@ class Draft:
 		self.prev_drafter_index = 0
 		self.current_drafter_index = 0
 
-		# to be removed once we have a draft class? or at least re-arranged? should a user's neighbors be stored on user?
-		# probably not, since it'll change if the wheel changes, should be accessed through draft helper method
-		next_player_slack_tags = []
-		for uid_index in range(len(users_in_draft_order)):
-			next_player_index = uid_index + 1
-			prev_player_index = uid_index - 1
-			if next_player_index == len(users_in_draft_order):
-				next_player_index = 0
-			if prev_player_index == -1:
-				prev_player_index = len(users_in_draft_order) - 1
-
-			next_player_dict = {}
-			next_player_dict['next'] = users_in_draft_order[next_player_index]
-			next_player_dict['prev'] = users_in_draft_order[prev_player_index]
-
-			next_player_slack_tags.append(next_player_dict)
-
-		self.next_player_slack_tags = next_player_slack_tags
 		print(self.users_in_draft_order)
-		print(self.next_player_slack_tags)
 
 def handleMissingChannelId(args, client):
 	if(not args.channel_id):
@@ -147,9 +128,7 @@ def printMessages(messages):
 def replaceUidWithUsername(str_to_replace, user):
 	return str_to_replace.replace(user.tag, "@%s" % user.name)
 
-def getYoureUpNextMessages(args, client, draft, messages):
-	users_in_draft_order = draft.users_in_draft_order
-	next_player_slack_tags = draft.next_player_slack_tags
+def getYoureUpNextMessages(draft, messages):
 	#print(messages)
 	most_recent_message_index = 0
 
@@ -162,7 +141,6 @@ def getYoureUpNextMessages(args, client, draft, messages):
 		if ignore:
 			continue
 
-		#for tag_to_match in next_player_slack_tags[current_drafter_index][draft_key]:
 		tag_to_match = draft.getNextDrafter().tag
 		#print("Checking %s against %s" % (tag_to_match, message['text']))
 
@@ -185,7 +163,7 @@ def getYoureUpNextMessages(args, client, draft, messages):
 					continue
 
 				#print("Checking tags against %s" % (inner_message['text']))
-				player_tagged = ignore = [user for user in users_in_draft_order if(user.uid in inner_message['text'])] 
+				player_tagged = [user for user in draft.users_in_draft_order if(user.uid in inner_message['text'])] 
 				if player_tagged:
 					inner_message_tag_count = inner_message_tag_count + 1
 			if inner_message_tag_count > 5: # Needs re-scan.  5 chosen to avoid triggering on chatter in between but not guaranteeing the 8-9 that a miss would result in. len(draft_order)/2+1?
@@ -231,8 +209,7 @@ def getYoureUpNextMessages(args, client, draft, messages):
 			print("%s drafted at: %s (%s). Next drafter is: %s" % (draft.getPreviousDrafter().name, message['ts'], replaceUidWithUsername(messages[message_index]['text'].replace("\n", " "), draft.getPreviousDrafter()), draft.getCurrentDrafter().name))
 			if draft.prev_draft_round != draft.current_draft_round:
 				print("Done with round %s after %s's pick" % (draft.prev_draft_round, draft.getCurrentDrafter().name))
-			#print("New tag to match is %s (%s)" % (next_player_slack_tags[current_drafter_index][draft_key], replaceUidWithUsername(next_player_slack_tags[current_drafter_index][draft_key], next_player_slack_tags[current_drafter_index])))
-			
+
 			most_recent_message_index = message_index
 
 
@@ -252,4 +229,4 @@ messages = getTimeOrderedMessages(args, client)
 draft = Draft(users_in_draft_order)
 
 #printMessages(messages)
-getYoureUpNextMessages(args, client, draft, messages)
+getYoureUpNextMessages(draft, messages)
