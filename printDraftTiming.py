@@ -4,6 +4,9 @@ import argparse
 from ast import literal_eval
 import slack
 
+def replaceUidWithUsername(str_to_replace, user):
+	return str_to_replace.replace(user.tag, "@%s" % user.name)
+
 class User:
 	def setTagFromUid(self, _uid):
 		if _uid:
@@ -65,6 +68,17 @@ class Draft:
 		self.current_drafter_index = 0
 
 		print(self.users_in_draft_order)
+
+class Pick:
+	def __init__(self, _user, _ts, _message):
+		self.user = _user
+		self.ts = _ts
+		self.message = _message
+
+	def __str__(self):
+		return "%s picked at: %s (%s)" % (self.user.name, self.ts, self.message)
+	def __repr__(self):
+		return self.__str__()
 
 def handleMissingChannelId(args, client):
 	if(not args.channel_id):
@@ -130,10 +144,8 @@ def printMessages(messages):
 			if(message and message['text']):
 				print(message['user'] + " -- " + message['ts'] + " -- " + message['text'])
 
-def replaceUidWithUsername(str_to_replace, user):
-	return str_to_replace.replace(user.tag, "@%s" % user.name)
-
-def getYoureUpNextMessages(draft, messages):
+def getPicks(draft, messages):
+	picks = []
 	#print(messages)
 	most_recent_message_index = 0
 
@@ -150,13 +162,13 @@ def getYoureUpNextMessages(draft, messages):
 		if ignore:
 			continue
 
+		current_drafter = draft.getCurrentDrafter()
 		tag_to_match = draft.getNextDrafter().tag
 		#print("Checking %s against %s" % (tag_to_match, message['text']))
 
 		# is it OK if someone else tags the person that's up? or should we check that the message sender is the previous drafter?
 		if tag_to_match in message['text']:
 			# update next drafter and direction properly so we know it for re-scan if necessary
-			rescan_user = draft.getCurrentDrafter()
 			draft.moveToNextDrafter()
 
 			# check that there aren't a lot of legal tags in between the start and end index.  If so, we probably missed one and should do a re-scan
@@ -205,8 +217,8 @@ def getYoureUpNextMessages(draft, messages):
 								if ignore:
 									continue
 
-								if reverse_message['user'] == rescan_user.uid:
-									print("Most recent message from %s is %s, assuming this is their pick." % (rescan_user.name, reverse_message['text']))
+								if reverse_message['user'] == current_drafter.uid:
+									print("Most recent message from %s is %s, assuming this is their pick." % (current_drafter.name, reverse_message['text']))
 									print("Setting message index to %d" % reverse_message_index)
 									message_index = reverse_message_index
 									break
@@ -216,9 +228,16 @@ def getYoureUpNextMessages(draft, messages):
 						#	next_player_rescan_index = rescan_message_index
 
 			#print("%s %s %s", (messages[message_index-1]['text'], messages[message_index]['text'], messages[message_index+1]['text']))
-			print("%s drafted at: %s (%s). Next drafter is: %s" % (rescan_user.name, message['ts'], replaceUidWithUsername(messages[message_index]['text'].replace("\n", " "), rescan_user), draft.getCurrentDrafter().name))
+			#print("%s drafted at: %s (%s). Next drafter is: %s" % (current_drafter.name, message['ts'], replaceUidWithUsername(messages[message_index]['text'].replace("\n", " "), current_drafter), draft.getCurrentDrafter().name))
+			
+			# need a "prettify" method that removes newlines, replaces UID tags with name tags, etc.
+			pick = Pick(current_drafter, message['ts'], messages[message_index]['text'].replace("\n", " "))
+			print(str(pick) + " Next drafter is: %s" %  draft.getCurrentDrafter().name)
+			picks.append(pick)
 
 			most_recent_message_index = message_index
+
+	return picks
 
 
 parser = argparse.ArgumentParser() 
@@ -235,6 +254,8 @@ users_in_draft_order = createUsers(args,client)
 messages = getTimeOrderedMessages(args, client)
 
 draft = Draft(users_in_draft_order)
+picks = getPicks(draft, messages)
 
-#printMessages(messages)
-getYoureUpNextMessages(draft, messages)
+for pick in picks:
+	print(pick)
+#print(picks)
