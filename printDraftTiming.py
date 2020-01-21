@@ -21,6 +21,11 @@ class User:
 		self.setName(_name)
 		self.setUid(_uid)
 
+	def __str__(self):
+		return "%s (%s)" % (self.name, self.uid)
+	def __repr__(self):
+		return self.__str__()
+
 class Draft:
 	def getDrafterCount(self):
 		return len(self.users_in_draft_order)
@@ -128,7 +133,7 @@ def getTimeOrderedMessages(args, client):
 		if not conversations['ok']:
 			break
 
-		print(str(conversations['ok']) + " -- " + str(conversations['has_more']) + " -- " + str(len(conversations['messages'])))
+		#print(str(conversations['ok']) + " -- " + str(conversations['has_more']) + " -- " + str(len(conversations['messages'])))
 
 		all_messages.extend(conversations['messages'])
 
@@ -218,8 +223,8 @@ def getPicks(draft, messages):
 									continue
 
 								if reverse_message['user'] == current_drafter.uid:
-									print("Most recent message from %s is %s, assuming this is their pick." % (current_drafter.name, reverse_message['text']))
-									print("Setting message index to %d" % reverse_message_index)
+									#print("Most recent message from %s is %s, assuming this is their pick." % (current_drafter.name, reverse_message['text']))
+									#print("Setting message index to %d" % reverse_message_index)
 									message_index = reverse_message_index
 									break
 						#print("Checking tags against %s" % (inner_message['text']))
