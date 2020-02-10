@@ -284,7 +284,7 @@ def getPicks(draft, messages):
 		#print("Checking %s against %s" % (tag_to_match, message['text']))
 
 		# is it OK if someone else tags the person that's up? or should we check that the message sender is the previous drafter?
-		if tag_to_match in message['text']:
+		if tag_to_match in message['text'] or message_index + 1 == len(messages):
 			# update next drafter and direction properly so we know it for re-scan if necessary
 			draft.moveToNextDrafter()
 
