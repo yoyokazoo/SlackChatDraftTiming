@@ -202,9 +202,8 @@ def printMessages(messages):
 				print(message['user'] + " -- " + message['ts'] + " -- " + message['text'])
 
 def getRescannedIndex(draft, messages, message_index, most_recent_message_index):
-	prettyPrint(draft, "Inner message tag count = %d... worth re-searching? (YES!) Current drafter is %s" % (inner_message_tag_count, draft.getCurrentDrafter().name)) if args.pick_index else noop()
 	rescan_tag_to_match = draft.getNextDrafter().tag
-	prettyPrint(draft, "Tag we're trying to look for to resolve this: %s, current drafter uid: %s" % (rescan_tag_to_match, current_drafter.uid)) if args.pick_index else noop()
+	prettyPrint(draft, "Tag we're trying to look for to resolve this: %s, current drafter uid: %s" % (rescan_tag_to_match, draft.getCurrentDrafter().uid)) if args.pick_index else noop()
 
 	for rescan_message_index_offset in range(message_index - most_recent_message_index):
 		rescan_message_index = rescan_message_index_offset + most_recent_message_index + 1
@@ -261,7 +260,7 @@ def getPicks(draft, messages):
 		tag_to_match = draft.getNextDrafter().tag
 
 		if args.pick_index and Pick.raw_pick_index == int(args.pick_index):
-			print("Checking %s against %s" % (tag_to_match, message['text']))
+			prettyPrint(draft, "Checking %s against %s" % (tag_to_match, message['text']))
 		#print("Checking %s against %s" % (tag_to_match, message['text']))
 
 		# is it OK if someone else tags the person that's up? or should we check that the message sender is the previous drafter?
@@ -288,6 +287,7 @@ def getPicks(draft, messages):
 			if inner_message_tag_count > 5: # Needs re-scan.  5 chosen to avoid triggering on chatter in between but not guaranteeing the 8-9 that a miss would result in. len(draft_order)/2+1?
 					# looks suspiscious, let's re-scan.  for example, player B needs to pick, then it will be player A's turn
 					# search for player A's next tag, then look backwards for player B's most recent message.  That one is likely their actual draft.
+					prettyPrint(draft, "Inner message tag count = %d... worth re-searching? (YES!) Current drafter is %s" % (inner_message_tag_count, draft.getCurrentDrafter().name)) if args.pick_index else noop()
 					message_index = getRescannedIndex(draft, messages, message_index, most_recent_message_index)
 
 					
@@ -300,7 +300,7 @@ def getPicks(draft, messages):
 			#print("%s drafted at: %s (%s). Next drafter is: %s" % (current_drafter.name, message['ts'], replaceUidWithUsername(messages[message_index]['text'].replace("\n", " "), current_drafter), draft.getCurrentDrafter().name))
 
 			pick = Pick(current_drafter, int(float(message['ts'])), messages[message_index]['text'].replace("\n", " "), current_round)
-			print(str(pick) + " Next drafter is: %s" %  draft.getCurrentDrafter().name)
+			# print(str(pick) + " Next drafter is: %s" %  draft.getCurrentDrafter().name)
 			picks.append(pick)
 
 			most_recent_message_index = message_index
