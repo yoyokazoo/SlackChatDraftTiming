@@ -201,7 +201,11 @@ def printMessages(messages):
 			if(message and message['text']):
 				print(message['user'] + " -- " + message['ts'] + " -- " + message['text'])
 
-def getRescannedIndex(draft, messages, message_index):
+def getRescannedIndex(draft, messages, message_index, most_recent_message_index):
+	prettyPrint(draft, "Inner message tag count = %d... worth re-searching? (YES!) Current drafter is %s" % (inner_message_tag_count, draft.getCurrentDrafter().name)) if args.pick_index else noop()
+	rescan_tag_to_match = draft.getNextDrafter().tag
+	prettyPrint(draft, "Tag we're trying to look for to resolve this: %s, current drafter uid: %s" % (rescan_tag_to_match, current_drafter.uid)) if args.pick_index else noop()
+
 	for rescan_message_index_offset in range(message_index - most_recent_message_index):
 		rescan_message_index = rescan_message_index_offset + most_recent_message_index + 1
 		#print("%s %s %s" % (message_index, most_recent_message_index, inner_message_index))
@@ -284,45 +288,9 @@ def getPicks(draft, messages):
 			if inner_message_tag_count > 5: # Needs re-scan.  5 chosen to avoid triggering on chatter in between but not guaranteeing the 8-9 that a miss would result in. len(draft_order)/2+1?
 					# looks suspiscious, let's re-scan.  for example, player B needs to pick, then it will be player A's turn
 					# search for player A's next tag, then look backwards for player B's most recent message.  That one is likely their actual draft.
-					prettyPrint(draft, "Inner message tag count = %d... worth re-searching? (YES!) Current drafter is %s" % (inner_message_tag_count, draft.getCurrentDrafter().name)) if args.pick_index else noop()
+					message_index = getRescannedIndex(draft, messages, message_index, most_recent_message_index)
 
-					rescan_tag_to_match = draft.getNextDrafter().tag
-					prettyPrint(draft, "Tag we're trying to look for to resolve this: %s, current drafter uid: %s" % (rescan_tag_to_match, current_drafter.uid)) if args.pick_index else noop()
-					#if draft.isUserOnLastPickOfRound():
-					#	Print("AYYYYYYYLMAO")
-					#	rescan_tag_to_match = draft.getNextNextDrafter().tag
-
-					for rescan_message_index_offset in range(message_index - most_recent_message_index):
-						rescan_message_index = rescan_message_index_offset + most_recent_message_index + 1
-						#print("%s %s %s" % (message_index, most_recent_message_index, inner_message_index))
-						rescan_message = messages[rescan_message_index]
-
-						ignore = [contains_ignore for contains_ignore in IGNORE_THESE_MESSAGES if(contains_ignore in rescan_message['text'])]
-						if ignore:
-							continue
-
-						if rescan_tag_to_match in rescan_message['text']:
-							prettyPrint(draft, "Found what we think the next tag is: %s" % rescan_message['text']) if args.pick_index else noop()
-							next_player_rescan_index = rescan_message_index
-
-							for reverse_message_index_offset in reversed(range(next_player_rescan_index - most_recent_message_index)):
-								reverse_message_index = reverse_message_index_offset + most_recent_message_index
-								#print("%s %s %s" % (message_index, most_recent_message_index, inner_message_index))
-								reverse_message = messages[reverse_message_index]
-								prettyPrint(draft, "Checking for most recent message against %s (user: <@%s>)" % (reverse_message['text'], reverse_message['user'])) if args.pick_index else noop()
-
-								ignore = [contains_ignore for contains_ignore in IGNORE_THESE_MESSAGES if(contains_ignore in reverse_message['text'])]
-								if ignore:
-									continue
-
-								rescan_drafter = current_drafter
-								if draft.isUserOnFirstPickOfRound():
-									rescan_drafter = draft.getPreviousDrafter()
-								if reverse_message['user'] == rescan_drafter.uid:
-									print("Most recent message from %s is %s, assuming this is their pick." % (rescan_drafter.name, reverse_message['text'])) if args.pick_index else noop()
-									print("Setting message index to %d" % reverse_message_index) if args.pick_index else noop()
-									message_index = reverse_message_index
-									break
+					
 						#print("Checking tags against %s" % (inner_message['text']))
 						#player_tagged = ignore = [next_players_tag for uid_tagged in all_uid_tags if(uid_tagged in rescan_message['text'])]
 						#if player_tagged:
