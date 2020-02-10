@@ -3,6 +3,8 @@ import os
 import argparse
 from ast import literal_eval
 import slack
+import time
+import json
 
 def replaceUidWithUsername(str_to_replace, user):
 	return str_to_replace.replace(user.tag, "@%s" % user.name)
@@ -91,7 +93,8 @@ class Pick:
 		self.round = _round
 
 	def __str__(self):
-		return "%s picked at: %s (%s) (Round %s)" % (self.user.name, self.ts, self.message, self.round)
+		strtime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.ts))
+		return "%s picked at: %s (%s) (Round %s)" % (self.user.name, strtime, self.message, self.round)
 	def __repr__(self):
 		return self.__str__()
 
@@ -129,30 +132,53 @@ def createUsers(args, client):
 	return users_in_draft_order
 
 def getTimeOrderedMessages(args, client):
-	all_messages = []
-	conversations = None
-	while True:
-		if not conversations:
-			conversations = client.conversations_history(channel=args.channel_id)
-		else:
-			conversations = client.conversations_history(
-				channel=args.channel_id,
-				cursor=conversations['response_metadata']['next_cursor']
-			)
 
-		if not conversations['ok']:
-			break
+	channel_filename = args.channel_id + ".txt"
+	if not os.path.isfile(channel_filename):
+		f = open(channel_filename, "w+")
+		f.close()
 
-		#print(str(conversations['ok']) + " -- " + str(conversations['has_more']) + " -- " + str(len(conversations['messages'])))
+	with open(channel_filename, "r+", encoding="utf-8") as messages_file:
+		
+		slack_messages = []
+		oldest_ts = 0
 
-		all_messages.extend(conversations['messages'])
+		messages_file_contents = messages_file.read()
+		if messages_file_contents:
+			slack_messages = json.loads(messages_file_contents)
+			oldest_ts = slack_messages[-1]['ts']
+			# timestamp is unique according to https://api.slack.com/events/message
+			# so we don't have to worry about missing "simultaneous" messages
 
-		if not conversations['has_more']:
-			break
+		conversations = None
+		new_slack_messages = []
+		while True:
+			if not conversations:
+				conversations = client.conversations_history(channel=args.channel_id, oldest=oldest_ts)
+			else:
+				conversations = client.conversations_history(
+					channel=args.channel_id,
+					cursor=conversations['response_metadata']['next_cursor']
+				)
 
+			if not conversations['ok']:
+				break
 
-	all_messages.sort(key=(lambda message: message['ts']))
-	return all_messages
+			#print(str(conversations['ok']) + " -- " + str(conversations['has_more']) + " -- " + str(len(conversations['messages'])))
+
+			new_slack_messages.extend(conversations['messages'])
+
+			if not conversations['has_more']:
+				break
+
+		slack_messages.extend(new_slack_messages)
+		slack_messages.sort(key=(lambda message: message['ts']))
+
+		messages_file.seek(0)
+		messages_file.write(json.dumps(slack_messages))
+		messages_file.truncate()
+
+	return slack_messages
 
 def printMessages(messages):
 	for message in messages:
@@ -247,7 +273,7 @@ def getPicks(draft, messages):
 			#print("%s drafted at: %s (%s). Next drafter is: %s" % (current_drafter.name, message['ts'], replaceUidWithUsername(messages[message_index]['text'].replace("\n", " "), current_drafter), draft.getCurrentDrafter().name))
 
 			# need a "prettify" method that removes newlines, replaces UID tags with name tags, etc.
-			pick = Pick(current_drafter, message['ts'], messages[message_index]['text'].replace("\n", " "), current_round)
+			pick = Pick(current_drafter, int(float(message['ts'])), messages[message_index]['text'].replace("\n", " "), current_round)
 			#print(str(pick) + " Next drafter is: %s" %  draft.getCurrentDrafter().name)
 			picks.append(pick)
 
@@ -266,6 +292,7 @@ print(args)
 client = slack.WebClient(token=args.token)
 
 handleMissingChannelId(args, client)
+
 users_in_draft_order = createUsers(args,client)
 messages = getTimeOrderedMessages(args, client)
 
