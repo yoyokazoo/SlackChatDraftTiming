@@ -55,12 +55,25 @@ class Draft:
 		return self.users_in_draft_order[self.getSafeDrafterIndex(self.current_drafter_index + (self.draft_direction*2))]
 	def changeDraftDirection(self):
 		self.draft_direction = self.draft_direction * -1
+	def getMiddleDraftRound(self):
+		return (self.getDrafterCount() * 2)+1
+	def isEarlyDraftRound(self):
+		return self.current_draft_round < self.getMiddleDraftRound()
+	def isMiddleDraftRound(self):
+		return self.current_draft_round >= self.getMiddleDraftRound()
 	def isUserOnFirstPickOfRound(self):
-		return self.draft_direction == 1 and self.current_drafter_index == self.start_drafter_index
+		# for this early round/middle round stuff, maybe we can use next_drafter_direction??
+		early_round = self.draft_direction == 1 and self.current_drafter_index == self.start_drafter_index
+		middle_round = self.draft_direction == -1 and self.current_drafter_index == self.start_drafter_index
+		return (self.isEarlyDraftRound() and early_round) or (self.isMiddleDraftRound() and middle_round)
 	def isUserOnMidRoundWheel(self):
-		return self.draft_direction == 1 and self.current_drafter_index == self.end_drafter_index
+		early_round = self.draft_direction == 1 and self.current_drafter_index == self.end_drafter_index
+		middle_round = self.draft_direction == -1 and self.current_drafter_index == self.end_drafter_index
+		return (self.isEarlyDraftRound() and early_round) or (self.isMiddleDraftRound() and middle_round)
 	def isUserOnLastPickOfRound(self):
-		return self.draft_direction == -1 and self.current_drafter_index == self.start_drafter_index
+		early_round = self.draft_direction == -1 and self.current_drafter_index == self.start_drafter_index
+		middle_round = self.draft_direction == 1 and self.current_drafter_index == self.start_drafter_index
+		return (self.isEarlyDraftRound() and early_round) or (self.isMiddleDraftRound() and middle_round)
 	def moveToNextDrafter(self):
 		self.prev_drafter_index = self.current_drafter_index
 		self.prev_draft_round = self.current_draft_round
@@ -74,9 +87,15 @@ class Draft:
 		elif self.isUserOnLastPickOfRound():
 			self.current_draft_round = self.current_draft_round + 1
 			# change to be extensible later on, since this draft is unusual
-			self.start_drafter_index = self.getSafeDrafterIndex(self.start_drafter_index + 1)
-			self.end_drafter_index = self.getSafeDrafterIndex(self.end_drafter_index + 1)
-			self.changeDraftDirection()
+			if self.current_draft_round == 19:
+				# full direction change, which end up keeping the same start drafter index and direction
+				# just need to move end drafter index
+				self.end_drafter_index = self.getSafeDrafterIndex(self.start_drafter_index + 1)
+				self.next_drafter_direction = -1
+			else:
+				self.start_drafter_index = self.getSafeDrafterIndex(self.start_drafter_index + self.next_drafter_direction)
+				self.end_drafter_index = self.getSafeDrafterIndex(self.end_drafter_index + self.next_drafter_direction)
+				self.changeDraftDirection()
 
 		#if draft.prev_draft_round != draft.current_draft_round:
 		#		print("Done with round %s after %s's pick" % (draft.prev_draft_round, draft.getCurrentDrafter().name))
@@ -88,6 +107,7 @@ class Draft:
 		self.current_draft_round = 1
 
 		self.draft_direction = 1
+		self.next_drafter_direction = 1
 
 		self.start_drafter_index = 0
 		self.end_drafter_index = self.getDrafterCount() - 1
