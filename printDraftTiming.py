@@ -6,6 +6,10 @@ import slack
 import time
 import json
 
+noop = lambda *a, **k: None
+
+IGNORE_THESE_MESSAGES = ["has joined the channel", "set the channel topic"]
+
 def replaceUidWithUsername(str_to_replace, user):
 	return str_to_replace.replace(user.tag, "@%s" % user.name)
 
@@ -47,8 +51,16 @@ class Draft:
 		return self.users_in_draft_order[self.getSafeDrafterIndex(self.current_drafter_index - self.draft_direction)]
 	def getNextDrafter(self):
 		return self.users_in_draft_order[self.getSafeDrafterIndex(self.current_drafter_index + self.draft_direction)]
+	def getNextNextDrafter(self): # doesn't work on wheels... neither does getNextDrafter maybe?
+		return self.users_in_draft_order[self.getSafeDrafterIndex(self.current_drafter_index + (self.draft_direction*2))]
 	def changeDraftDirection(self):
 		self.draft_direction = self.draft_direction * -1
+	def isUserOnFirstPickOfRound(self):
+		return self.draft_direction == 1 and self.current_drafter_index == self.start_drafter_index
+	def isUserOnMidRoundWheel(self):
+		return self.draft_direction == 1 and self.current_drafter_index == self.end_drafter_index
+	def isUserOnLastPickOfRound(self):
+		return self.draft_direction == -1 and self.current_drafter_index == self.start_drafter_index
 	def moveToNextDrafter(self):
 		self.prev_drafter_index = self.current_drafter_index
 		self.prev_draft_round = self.current_draft_round
@@ -56,10 +68,10 @@ class Draft:
 		self.current_drafter_index = self.getSafeDrafterIndex(self.current_drafter_index + self.draft_direction)
 
 		# modify this to respect starting_drafter_index to wheel properly
-		if self.draft_direction == 1 and self.current_drafter_index == self.end_drafter_index:
+		if self.isUserOnMidRoundWheel():
 			self.current_draft_round = self.current_draft_round + 1
 			self.changeDraftDirection()
-		elif self.draft_direction == -1 and self.current_drafter_index == self.start_drafter_index:
+		elif self.isUserOnLastPickOfRound():
 			self.current_draft_round = self.current_draft_round + 1
 			# change to be extensible later on, since this draft is unusual
 			self.start_drafter_index = self.getSafeDrafterIndex(self.start_drafter_index + 1)
@@ -86,15 +98,19 @@ class Draft:
 		print(self.users_in_draft_order)
 
 class Pick:
+	raw_pick_index = 0
+
 	def __init__(self, _user, _ts, _message, _round):
 		self.user = _user
 		self.ts = _ts
 		self.message = _message
 		self.round = _round
+		self.pick_index = Pick.raw_pick_index
+		Pick.raw_pick_index += 1
 
 	def __str__(self):
 		strtime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.ts))
-		return "%s picked at: %s (%s) (Round %s)" % (self.user.name, strtime, self.message, self.round)
+		return "(%s) %s picked at: %s (%s) (Round %s)" % (self.pick_index, self.user.name, strtime, self.message, self.round)
 	def __repr__(self):
 		return self.__str__()
 
@@ -185,12 +201,44 @@ def printMessages(messages):
 			if(message and message['text']):
 				print(message['user'] + " -- " + message['ts'] + " -- " + message['text'])
 
+def getRescannedIndex(draft, messages, message_index):
+	for rescan_message_index_offset in range(message_index - most_recent_message_index):
+		rescan_message_index = rescan_message_index_offset + most_recent_message_index + 1
+		#print("%s %s %s" % (message_index, most_recent_message_index, inner_message_index))
+		rescan_message = messages[rescan_message_index]
+
+		ignore = [contains_ignore for contains_ignore in IGNORE_THESE_MESSAGES if(contains_ignore in rescan_message['text'])]
+		if ignore:
+			continue
+
+		if rescan_tag_to_match in rescan_message['text']:
+			prettyPrint(draft, "Found what we think the next tag is: %s" % rescan_message['text']) if args.pick_index else noop()
+			next_player_rescan_index = rescan_message_index
+
+			for reverse_message_index_offset in reversed(range(next_player_rescan_index - most_recent_message_index)):
+				reverse_message_index = reverse_message_index_offset + most_recent_message_index
+				#print("%s %s %s" % (message_index, most_recent_message_index, inner_message_index))
+				reverse_message = messages[reverse_message_index]
+				prettyPrint(draft, "Checking for most recent message against %s (user: <@%s>)" % (reverse_message['text'], reverse_message['user'])) if args.pick_index else noop()
+
+				ignore = [contains_ignore for contains_ignore in IGNORE_THESE_MESSAGES if(contains_ignore in reverse_message['text'])]
+				if ignore:
+					continue
+
+				rescan_drafter = draft.getCurrentDrafter()
+				if draft.isUserOnFirstPickOfRound():
+					rescan_drafter = draft.getPreviousDrafter()
+				if reverse_message['user'] == rescan_drafter.uid:
+					print("Most recent message from %s is %s, assuming this is their pick." % (rescan_drafter.name, reverse_message['text'])) if args.pick_index else noop()
+					print("Setting message index to %d" % reverse_message_index) if args.pick_index else noop()
+					return reverse_message_index
+
+	return message_index
+
 def getPicks(draft, messages):
 	picks = []
 	#print(messages)
 	most_recent_message_index = 0
-
-	IGNORE_THESE_MESSAGES = ["has joined the channel", "set the channel topic"]
 
 	# a little ugly fenceposting since we might modify the index on a rescan so a for loop won't work
 	message_index = -1
@@ -204,8 +252,12 @@ def getPicks(draft, messages):
 			continue
 
 		current_round = draft.current_draft_round
+		previous_drafter = draft.getPreviousDrafter()
 		current_drafter = draft.getCurrentDrafter()
 		tag_to_match = draft.getNextDrafter().tag
+
+		if args.pick_index and Pick.raw_pick_index == int(args.pick_index):
+			print("Checking %s against %s" % (tag_to_match, message['text']))
 		#print("Checking %s against %s" % (tag_to_match, message['text']))
 
 		# is it OK if someone else tags the person that's up? or should we check that the message sender is the previous drafter?
@@ -232,9 +284,13 @@ def getPicks(draft, messages):
 			if inner_message_tag_count > 5: # Needs re-scan.  5 chosen to avoid triggering on chatter in between but not guaranteeing the 8-9 that a miss would result in. len(draft_order)/2+1?
 					# looks suspiscious, let's re-scan.  for example, player B needs to pick, then it will be player A's turn
 					# search for player A's next tag, then look backwards for player B's most recent message.  That one is likely their actual draft.
-					#print("Inner message tag count = %d... worth re-searching? (YES!) Current drafter is %s" % (inner_message_tag_count, draft.getCurrentDrafter().name))
+					prettyPrint(draft, "Inner message tag count = %d... worth re-searching? (YES!) Current drafter is %s" % (inner_message_tag_count, draft.getCurrentDrafter().name)) if args.pick_index else noop()
 
 					rescan_tag_to_match = draft.getNextDrafter().tag
+					prettyPrint(draft, "Tag we're trying to look for to resolve this: %s, current drafter uid: %s" % (rescan_tag_to_match, current_drafter.uid)) if args.pick_index else noop()
+					#if draft.isUserOnLastPickOfRound():
+					#	Print("AYYYYYYYLMAO")
+					#	rescan_tag_to_match = draft.getNextNextDrafter().tag
 
 					for rescan_message_index_offset in range(message_index - most_recent_message_index):
 						rescan_message_index = rescan_message_index_offset + most_recent_message_index + 1
@@ -246,22 +302,25 @@ def getPicks(draft, messages):
 							continue
 
 						if rescan_tag_to_match in rescan_message['text']:
-							#print("Found what we think the next tag is: %s" % rescan_message['text'])
+							prettyPrint(draft, "Found what we think the next tag is: %s" % rescan_message['text']) if args.pick_index else noop()
 							next_player_rescan_index = rescan_message_index
 
 							for reverse_message_index_offset in reversed(range(next_player_rescan_index - most_recent_message_index)):
 								reverse_message_index = reverse_message_index_offset + most_recent_message_index
 								#print("%s %s %s" % (message_index, most_recent_message_index, inner_message_index))
 								reverse_message = messages[reverse_message_index]
-								#print("Checking for most recent message against %s (user: %s)" % (reverse_message['text'], reverse_message['user']))
+								prettyPrint(draft, "Checking for most recent message against %s (user: <@%s>)" % (reverse_message['text'], reverse_message['user'])) if args.pick_index else noop()
 
 								ignore = [contains_ignore for contains_ignore in IGNORE_THESE_MESSAGES if(contains_ignore in reverse_message['text'])]
 								if ignore:
 									continue
 
-								if reverse_message['user'] == current_drafter.uid:
-									#print("Most recent message from %s is %s, assuming this is their pick." % (current_drafter.name, reverse_message['text']))
-									#print("Setting message index to %d" % reverse_message_index)
+								rescan_drafter = current_drafter
+								if draft.isUserOnFirstPickOfRound():
+									rescan_drafter = draft.getPreviousDrafter()
+								if reverse_message['user'] == rescan_drafter.uid:
+									print("Most recent message from %s is %s, assuming this is their pick." % (rescan_drafter.name, reverse_message['text'])) if args.pick_index else noop()
+									print("Setting message index to %d" % reverse_message_index) if args.pick_index else noop()
 									message_index = reverse_message_index
 									break
 						#print("Checking tags against %s" % (inner_message['text']))
@@ -272,9 +331,8 @@ def getPicks(draft, messages):
 			#print("%s %s %s", (messages[message_index-1]['text'], messages[message_index]['text'], messages[message_index+1]['text']))
 			#print("%s drafted at: %s (%s). Next drafter is: %s" % (current_drafter.name, message['ts'], replaceUidWithUsername(messages[message_index]['text'].replace("\n", " "), current_drafter), draft.getCurrentDrafter().name))
 
-			# need a "prettify" method that removes newlines, replaces UID tags with name tags, etc.
 			pick = Pick(current_drafter, int(float(message['ts'])), messages[message_index]['text'].replace("\n", " "), current_round)
-			#print(str(pick) + " Next drafter is: %s" %  draft.getCurrentDrafter().name)
+			print(str(pick) + " Next drafter is: %s" %  draft.getCurrentDrafter().name)
 			picks.append(pick)
 
 			most_recent_message_index = message_index
@@ -286,6 +344,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-t', '--token', help="Workspace token of the app", required=True)
 parser.add_argument('-c', '--channel_id', help="Channel ID of the channel you want to scan.  If not included, it will list the available channels and ids")
 parser.add_argument('-d', '--draft_order', help="Order of drafters.  ", default=['ADD_DRAFTERS_HERE'], nargs='+')
+parser.add_argument('-i', '--pick_index', help="If specified, output all text around this pick for debugging")
 args = parser.parse_args()
 print(args)
 
@@ -299,8 +358,9 @@ messages = getTimeOrderedMessages(args, client)
 draft = Draft(users_in_draft_order)
 picks = getPicks(draft, messages)
 
-for pick in picks:
-	prettyPrint(draft, pick.__str__())
+if not args.pick_index:
+	for pick in picks:
+		prettyPrint(draft, pick.__str__())
 #print(picks)
 
 # TODO:
